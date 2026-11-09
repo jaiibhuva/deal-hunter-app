@@ -172,6 +172,20 @@ main { padding: 4px 16px 24px; max-width: 640px; margin: 0 auto; }
 .problem b { display: block; margin-bottom: 4px; }
 .problem p { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
 .problem button { border: 0; background: var(--ink); color: var(--paper); font-weight: 800; padding: 10px 16px; border-radius: 12px; cursor: pointer; }
+.search-in { width: 100%; font: inherit; font-size: 1.05rem; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line);
+             background: var(--surface); color: var(--ink); margin: 4px 0 14px; }
+.result { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.result .thumb { width: 56px; height: 56px; }
+.result p { margin: 0; }
+.result .cat { color: var(--muted); font-size: .78rem; }
+.result .rn { font-weight: 650; font-size: .92rem; line-height: 1.25; }
+.result .rp { font-weight: 800; font-stretch: 80%; }
+.pill { border: 0; background: var(--ink); color: var(--paper); font-weight: 800; padding: 9px 14px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.pill.done { background: transparent; color: var(--down); border: 1px solid var(--line); }
+.target { display: flex; gap: 8px; margin-top: 6px; }
+.target input { flex: 1; min-width: 0; font: inherit; padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+.ghost { width: 100%; border: 1px solid var(--line); background: transparent; color: var(--up); font-weight: 700; padding: 13px; border-radius: 14px; margin-top: 12px; cursor: pointer; }
+.hint { color: var(--muted); font-size: .84rem; margin: 6px 2px 0; }
 .foot { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 24px; }
 </style>
 </head>
@@ -179,6 +193,9 @@ main { padding: 4px 16px 24px; max-width: 640px; margin: 0 auto; }
 <header class="head" id="head">
   <h1 id="title">Deal Hunter</h1>
   <div class="updated" id="updated"></div>
+  <button class="icon-btn" id="add" aria-label="Track something new">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
   <button class="icon-btn" id="refresh" aria-label="Refresh">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
   </button>
@@ -221,6 +238,79 @@ let KEY = clean(store.get("dh_key", ""));
 let cache = store.get("dh_cache", {});     // latest app data, by message title
 let alerts = store.get("dh_alerts", []);   // alert history, newest first
 let tab = "tracking";
+const PR = "https://www.pricerunner.com";
+let list = store.get("dh_list", null);   // your tracked list: {ts, items: [{n, u, tg}]}, shared with the cloud
+let local = store.get("dh_local", {});   // prices this phone fetched itself, by item key
+const KEYS = {};                         // item url -> short key (same as the cloud's)
+async function keyOf(u) {
+  if (!KEYS[u]) {
+    const b = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(u));
+    KEYS[u] = [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("").slice(0, 10);
+  }
+  return KEYS[u];
+}
+const prId = u => (String(u).match(/\/pl\/\d+-(\d+)/) || [])[1];
+const median = a => { const b = [...a].sort((x, y) => x - y), m = b.length >> 1; return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2; };
+
+// same deal score as the cloud: discount vs normal, money saved, history behind it, and new lows
+function rate(price, series) {
+  const prices = series.map(p => p[1]), before = prices.slice(0, -1).length ? prices.slice(0, -1) : prices, last90 = before.slice(-90);
+  const nm = last90.length ? median(last90) : null, why = [];
+  const pct = nm && nm > price ? (nm - price) / nm * 100 : 0;
+  let pts = Math.min(pct, 50) / 50 * 55;
+  if (nm && nm > price) { pts += Math.min(nm - price, 500) / 500 * 10; why.push(`${Math.round(pct)}% below normal, saves ${money(nm - price)}`); }
+  if (prices.length >= 60) { pts += 10; why.push(`based on ${prices.length} days of price history`); }
+  const lowYear = before.length ? Math.min(...before) : null, low90 = last90.length ? Math.min(...last90) : null;
+  if (lowYear != null && price <= lowYear) { pts += 15; why.push("lowest price in a year"); }
+  else if (low90 != null && price <= low90) { pts += 10; why.push("lowest price in 3 months"); }
+  pts = Math.round(Math.min(pts, 100));
+  const t = pts >= 85 ? "Gem" : pts >= 75 ? 5 : pts >= 60 ? 4 : pts >= 45 ? 3 : pts >= 30 ? 2 : 1;
+  return { nm, ly: lowYear, hy: prices.length ? Math.max(...prices) : null, pts, t, w: why };
+}
+async function searchPR(q) {
+  const r = await fetch(`${PR}/uk/api/instant-search-edge-rest/public/search/suggest/products/UK?q=${encodeURIComponent(q.slice(0, 100))}`);
+  return ((await r.json()).products || []).filter(p => p.url && p.lowestPrice);
+}
+const prImg = p => p.image && p.image.id ? `${PR}/product/400x400/${p.image.id}/x.jpg` : null;
+
+// fetch an item's year of prices and live price straight from PriceRunner, on the phone
+async function fetchLive(entry) {
+  const pid = prId(entry.u); if (!pid) return;
+  const k = await keyOf(entry.u);
+  const res = await fetch(`${PR}/uk/api/product-information-edge-rest/public/pricehistory/product/${pid}/UK/DAY?selectedInterval=ONE_YEAR&filter=NATIONAL&merchantId=`);
+  const h = await res.json(), days = {};
+  (h.history || []).forEach(x => { const d = x.timestamp.slice(0, 10); days[d] = Math.min(x.price, days[d] ?? Infinity); });
+  let series = Object.entries(days).sort((a, b) => a[0] < b[0] ? -1 : 1);
+  if (series.length >= 5) { const mid = median(series.map(p => p[1])); series = series.filter(p => p[1] >= mid * .5); }
+  let price = null, img = null;
+  try { const hit = (await searchPR(entry.n)).find(p => p.id === pid); if (hit) { price = +hit.lowestPrice.amount; img = prImg(hit); } } catch (e) {}
+  price = price ?? (series.length ? series[series.length - 1][1] : null);
+  if (price == null) return;
+  const today = new Date().toISOString().slice(0, 10);
+  series = series.filter(p => p[0] !== today).concat([[today, price]]);
+  const old = local[k] || {};
+  const filled = []; let cur = null; const start = new Date(series[0][0] + "T00:00:00"), map = Object.fromEntries(series);
+  for (let d = new Date(start); d.toISOString().slice(0, 10) <= today; d.setDate(d.getDate() + 1)) {
+    const key = d.toISOString().slice(0, 10); cur = map[key] ?? cur; filled.push(cur == null ? null : Math.round(cur));
+  }
+  local[k] = { k, n: entry.n, u: entry.u, i: img || old.i, p: price, pv: old.p && old.p !== price ? old.p : old.pv,
+               ch: old.p && old.p !== price ? Date.now() / 1000 : old.ch, s0: series[0][0], s: filled, at: Date.now() / 1000, ...rate(price, series) };
+}
+async function liveUpdate() {
+  if (!list || !navigator.onLine) return;
+  for (const e of list.items) { try { await fetchLive(e); } catch (err) {} }
+  store.set("dh_local", local); render();
+}
+async function publishList() {
+  list.ts = Date.now() / 1000; store.set("dh_list", list);
+  try { await fetch(`https://ntfy.sh/${encodeURIComponent(KEY)}-app?title=list&priority=1`, { method: "POST", body: JSON.stringify(list) }); }
+  catch (e) { lastError = "your change is saved on this phone but couldn't be sent yet"; }
+}
+function ensureList() {
+  if (list) return;
+  const ids = (cache.items && cache.items.d) || [];
+  list = { ts: 0, items: ids.map(k => cache["item:" + k] && cache["item:" + k].d).filter(Boolean).map(d => ({ n: d.n, u: d.u, ...(d.tg ? { tg: d.tg } : {}) })) };
+}
 
 // ---- data ----
 async function poll(topic, since) {
@@ -236,6 +326,7 @@ async function refresh() {
     data.sort((a, b) => a.time - b.time).forEach(m => {
       try { cache[m.title] = { d: JSON.parse(m.message), ts: m.time }; } catch (e) {}
     });
+    if (cache.list && cache.list.d && (!list || cache.list.d.ts > list.ts)) { list = cache.list.d; store.set("dh_list", list); }
     const known = new Set(alerts.map(a => a.id));
     const fresh = live.filter(m => !known.has(m.id) && m.title !== "Deal Hunter")
       .map(m => ({ id: m.id, ts: m.time, t: m.title, m: m.message, u: m.click, i: m.attachment && m.attachment.url, p: m.priority }));
@@ -248,14 +339,26 @@ async function refresh() {
   } catch (e) {
     lastError = e && e.message ? e.message : "no connection";
   }
+  if (list) await Promise.all(list.items.map(e => keyOf(e.u)));
   $("#refresh").classList.remove("spin");
   render();
+  liveUpdate();
 }
 let lastError = "";
 
 function items() {
-  const ids = (cache.items && cache.items.d) || [];
-  return ids.map(k => cache["item:" + k] && cache["item:" + k].d).filter(Boolean).sort((a, b) => (b.pts || 0) - (a.pts || 0));
+  if (!list) {
+    const ids = (cache.items && cache.items.d) || [];
+    return ids.map(k => cache["item:" + k] && cache["item:" + k].d).filter(Boolean).sort((a, b) => (b.pts || 0) - (a.pts || 0));
+  }
+  const missing = list.items.filter(e => !KEYS[e.u]);
+  if (missing.length) Promise.all(missing.map(e => keyOf(e.u))).then(render);
+  return list.items.map(e => {
+    const k = KEYS[e.u]; if (!k) return null;
+    const cloud = cache["item:" + k] ? cache["item:" + k].d : null, mine = local[k];
+    const best = mine && (!cloud || mine.at >= lastUpdate()) ? { ...(cloud || {}), ...mine, i: mine.i || (cloud && cloud.i) } : cloud;
+    return best ? { ...best, k, n: e.n, u: e.u, tg: e.tg } : { k, n: e.n, u: e.u, tg: e.tg, p: null, loading: true };
+  }).filter(Boolean).sort((a, b) => (b.pts || 0) - (a.pts || 0));
 }
 function lastUpdate() {
   return Math.max(0, ...Object.keys(cache).filter(k => k.startsWith("meta:")).map(k => cache[k].d.ts || 0));
@@ -309,11 +412,12 @@ const belowText = it => it.nm && it.nm > it.p ? `${Math.round((it.nm - it.p) / i
 // ---- screens ----
 function viewTracking() {
   const list = items();
-  if (!list.length) return `<div class="empty"><b>Nothing tracked yet</b>Your tracked items appear here after the Mac's next check. To track something, send Claude a product link.</div>`;
+  if (!list.length) return `<div class="empty"><b>Nothing tracked yet</b>Tap + to search for a product and start tracking its price.</div>`;
   const drops = list.filter(i => i.pv && i.p < i.pv).length, good = list.filter(i => rank(i.t) >= 3).length;
   const lede = [`${list.length} item${list.length > 1 ? "s" : ""} tracked.`, drops ? `${drops} dropped since the last check.` : "",
     good ? `${good} ${good > 1 ? "are" : "is"} a 3/5 deal or better.` : ""].filter(Boolean).join(" ");
-  return `<p class="lede">${lede}</p>` + list.map(it => `
+  return `<p class="lede">${lede}</p>` + list.map(it => it.loading ? `
+  <div class="card"><div class="row"><div class="thumb"></div><div><p class="name">${esc(it.n)}</p><span class="below">Fetching prices…</span></div><div></div></div></div>` : `
   <button class="card${it.t === "Gem" ? " gem" : ""}" data-item="${esc(it.k)}" aria-label="${esc(it.n)}, ${money(it.p)}">
     <div class="row">
       <div class="thumb">${imgTag(it.i)}</div>
@@ -372,13 +476,14 @@ function render() {
   }
   const titles = { tracking: "Deal Hunter", deals: "Deals", alerts: "Alerts", stack: "Stack" };
   $("#title").textContent = titles[tab]; $("#title").className = tab === "tracking" ? "" : "screen";
+  $("#add").hidden = tab !== "tracking";
   const lu = lastUpdate();
   $("#updated").textContent = lu ? `Updated ${ago(lu)}` : "";
   const problem = lastError ? `<div class="panel problem"><b>Couldn't load your latest data</b>
       <p>${esc(lastError)}. ${Object.keys(cache).length ? "Showing what was saved last time." : ""} Check your connection and tap refresh. If it keeps happening, pair this phone again.</p>
       <button type="button" id="repair">Pair again</button></div>` : "";
   $("#main").innerHTML = problem + { tracking: viewTracking, deals: viewDeals, alerts: viewAlerts, stack: viewStack }[tab]()
-    + (tab === "tracking" ? `<p class="foot">Prices update while your Mac is awake. Clothes and sale news update around the clock.</p>` : "");
+    + (tab === "tracking" ? `<p class="foot">Prices refresh every time you open the app, and the cloud checks them every 30 minutes to send alerts.</p>` : "");
   document.querySelectorAll("[data-item]").forEach(b => b.onclick = () => openItem(b.dataset.item));
   const rp = $("#repair"); if (rp) rp.onclick = () => { KEY = ""; store.set("dh_key", ""); lastError = ""; render(); };
 }
@@ -391,10 +496,50 @@ function setTab(t) {
 document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
 $("#refresh").onclick = refresh;
 
+// ---- search + track ----
+let searchTimer;
+function openSearch() {
+  ensureList();
+  const el = $("#detail");
+  el.innerHTML = `<div class="bar"><button class="icon-btn" id="back" aria-label="Back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button><span></span></div>
+    <div class="wrap"><p class="d-name" style="margin-top:4px">Track something new</p>
+      <input class="search-in" id="q" type="search" placeholder="e.g. Samsung S95F, Sauvage, MacBook Air" autocomplete="off" aria-label="Search products">
+      <ul id="results"><li class="hint">Searches every UK shop on PriceRunner. Tap Track and you'll get an alert whenever the price changes.</li></ul></div>`;
+  el.hidden = false; el.classList.add("open"); document.body.style.overflow = "hidden";
+  history.pushState({ s: 1 }, "", "#search");
+  $("#back").onclick = closeItem;
+  const q = $("#q"); setTimeout(() => q.focus(), 50);
+  q.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => runSearch(q.value.trim()), 350); };
+}
+async function runSearch(q) {
+  const box = $("#results"); if (!box) return;
+  if (q.length < 2) { box.innerHTML = ""; return; }
+  box.innerHTML = `<li class="hint">Searching…</li>`;
+  try {
+    const rows = (await searchPR(q)).slice(0, 12);
+    if (!rows.length) { box.innerHTML = `<li class="hint">No products found. Try fewer words or a model number.</li>`; return; }
+    const tracked = new Set(list.items.map(i => i.u));
+    box.innerHTML = rows.map((p, n) => { const u = PR + p.url;
+      return `<li class="result"><div class="thumb">${imgTag(prImg(p))}</div>
+        <div><p class="cat">${esc(p.categoryName)}</p><p class="rn">${esc(p.name)}</p><p class="rp">${money(+p.lowestPrice.amount)}</p></div>
+        <button class="pill${tracked.has(u) ? " done" : ""}" data-n="${n}">${tracked.has(u) ? "Tracking" : "Track"}</button></li>`; }).join("");
+    box.querySelectorAll("[data-n]").forEach(b => b.onclick = async () => {
+      const p = rows[+b.dataset.n], u = PR + p.url;
+      if (list.items.some(i => i.u === u)) return;
+      list.items.push({ n: p.name, u }); b.textContent = "Tracking"; b.classList.add("done");
+      await keyOf(u); await publishList();
+      try { await fetchLive({ n: p.name, u }); store.set("dh_local", local); } catch (e) {}
+      render();
+    });
+  } catch (e) { box.innerHTML = `<li class="hint">Search isn't available right now. Check your connection and try again.</li>`; }
+}
+$("#add").onclick = openSearch;
+
 // ---- item detail ----
 let range = 365;
 function openItem(k) {
-  const it = cache["item:" + k] && cache["item:" + k].d; if (!it) return;
+  const it = items().find(i => i.k === k) || (cache["item:" + k] && cache["item:" + k].d); if (!it || it.loading) return;
   const el = $("#detail");
   const draw = () => {
     el.innerHTML = `<div class="bar"><button class="icon-btn" id="back" aria-label="Back">
@@ -416,9 +561,22 @@ function openItem(k) {
           <div><dt>Your target</dt><dd>${it.tg ? money(it.tg) : "None set"}</dd></div>
         </dl></div>
         ${(it.w || []).length ? `<div class="panel"><h3>Why it scores ${it.t === "Gem" ? "as a Gem" : (it.t || 1) + "/5"}</h3><ul class="why">${it.w.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+        <div class="panel"><h3>Alert me at a target price</h3>
+          <form class="target" id="tform"><input id="tin" type="number" inputmode="decimal" min="1" step="1" placeholder="e.g. ${Math.round((it.p || 0) * .9)}" value="${it.tg || ""}" aria-label="Target price in pounds"><button class="pill">Save</button></form>
+          <p class="hint" id="thint">${it.tg ? `You'll get an urgent alert when it drops to ${money(it.tg)} or less.` : "Every price change is sent anyway. A target makes the drop below it urgent."}</p></div>
         <a class="cta" href="${esc(it.u)}" target="_blank" rel="noopener">Compare shops and buy</a>
+        <button class="ghost" id="stop">Stop tracking</button>
       </div>`;
     $("#back").onclick = closeItem;
+    $("#tform").onsubmit = async e => { e.preventDefault(); ensureList();
+      const v = parseFloat($("#tin").value), entry = list.items.find(i => i.u === it.u); if (!entry) return;
+      if (v > 0) entry.tg = v; else delete entry.tg; it.tg = entry.tg;
+      await publishList();
+      $("#thint").textContent = entry.tg ? `Saved. You'll get an urgent alert when it drops to ${money(entry.tg)} or less.` : "Target removed."; };
+    let armed = false;
+    $("#stop").onclick = async () => {
+      if (!armed) { armed = true; $("#stop").textContent = "Tap again to stop tracking"; return; }
+      ensureList(); list.items = list.items.filter(i => i.u !== it.u); await publishList(); closeItem(); render(); };
     el.querySelectorAll("[data-r]").forEach(b => b.onclick = () => { range = +b.dataset.r; draw(); });
   };
   draw(); el.hidden = false; el.classList.add("open"); el.scrollTop = 0;
