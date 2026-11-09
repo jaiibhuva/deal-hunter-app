@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Deal Hunter</title>
+<meta name="theme-color" content="#132036">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Deal Hunter">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="favicon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #F3F5F8; --surface: #FFFFFF; --ink: #132036; --muted: #5D6B80; --line: #DCE1E8;
+  --ticket: #FFD43B; --down: #0F8A5F; --up: #C8203A; --cb: #2A6FDB;
+  --chart: #132036; --chart-fill: rgba(19,32,54,.07); --bar: rgba(255,255,255,.92);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --paper: #0E1626; --surface: #172236; --ink: #EEF2F8; --muted: #93A1B8; --line: #26334B;
+          --ticket: #F5C518; --down: #3DD598; --up: #FF6178; --cb: #5B9BFF;
+          --chart: #F5C518; --chart-fill: rgba(245,197,24,.08); --bar: rgba(23,34,54,.94); }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--paper); color: var(--ink); }
+body { font-family: "Archivo", system-ui, sans-serif; font-size: 16px; line-height: 1.4; -webkit-font-smoothing: antialiased;
+       min-height: 100dvh; padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+button { font: inherit; color: inherit; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--cb); outline-offset: 2px; border-radius: 8px; }
+ul { list-style: none; margin: 0; padding: 0; }
+
+/* header */
+.head { position: sticky; top: 0; z-index: 5; background: var(--paper);
+        padding: calc(env(safe-area-inset-top) + 14px) max(18px, calc((100% - 640px) / 2 + 16px)) 10px; display: flex; align-items: center; gap: 12px; }
+.head h1 { margin: 0; font-stretch: 125%; font-weight: 900; font-size: 1.35rem; letter-spacing: -.02em; flex: 1; }
+.head h1.screen { font-stretch: 105%; font-size: 1.6rem; }
+.updated { color: var(--muted); font-size: .8rem; text-align: right; }
+.icon-btn { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface);
+            display: grid; place-items: center; cursor: pointer; flex: none; }
+.icon-btn svg { width: 20px; height: 20px; }
+.spin svg { animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+main { padding: 4px 16px 24px; max-width: 640px; margin: 0 auto; }
+.lede { font-size: 1.15rem; font-weight: 500; font-stretch: 92%; margin: 2px 2px 18px; line-height: 1.3; }
+
+/* grade */
+.grade { display: inline-flex; align-items: center; gap: 3px; background: var(--ink); color: var(--paper);
+         padding: 4px 8px; border-radius: 999px; white-space: nowrap; flex: none; }
+.grade i { width: 7px; height: 7px; border-radius: 50%; background: #45536C; }
+.grade i.on { background: var(--ticket); }
+.grade b { font-size: .74rem; margin-left: 4px; }
+.grade.gem { background: var(--up); color: #fff; font-weight: 800; font-size: .8rem; padding: 4px 11px; }
+
+/* tracking list */
+.card { display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line);
+        border-radius: 18px; padding: 14px; margin-bottom: 12px; cursor: pointer; }
+.card.gem { border: 2px solid var(--up); }
+.row { display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; align-items: center; }
+.thumb { width: 60px; height: 60px; border-radius: 12px; background: #fff; border: 1px solid var(--line);
+         display: grid; place-items: center; overflow: hidden; }
+.thumb img { width: 86%; height: 86%; object-fit: contain; }
+.name { font-weight: 650; font-size: .95rem; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical; overflow: hidden; margin: 0 0 6px; }
+.price { text-align: right; }
+.price b { display: block; font-stretch: 72%; font-weight: 900; font-size: 1.75rem; line-height: 1; font-variant-numeric: tabular-nums; }
+.chg { display: inline-block; font-size: .78rem; font-weight: 700; margin-top: 4px; color: var(--muted); }
+.chg.down { color: var(--down); } .chg.up { color: var(--up); }
+.spark { display: block; width: 100%; height: 38px; margin-top: 10px; }
+.spark path.l { fill: none; stroke: var(--chart); stroke-width: 1.6; }
+.spark path.a { fill: var(--chart-fill); }
+.spark line { stroke: var(--muted); stroke-dasharray: 3 3; stroke-width: 1; opacity: .7; }
+.below { color: var(--muted); font-size: .8rem; }
+
+/* detail */
+.detail { position: fixed; inset: 0; z-index: 20; background: var(--paper); overflow-y: auto;
+          padding: calc(env(safe-area-inset-top) + 10px) 0 calc(28px + env(safe-area-inset-bottom)); }
+.detail[hidden] { display: none; }
+@media (prefers-reduced-motion: no-preference) { .detail.open { animation: up .28s cubic-bezier(.2,.8,.2,1); } }
+@keyframes up { from { transform: translateY(24px); opacity: 0; } }
+.detail .bar { display: flex; justify-content: space-between; align-items: center; padding: 0 16px 8px; }
+.detail .wrap { max-width: 640px; margin: 0 auto; padding: 0 16px; }
+.hero-img { background: #fff; border-radius: 20px; aspect-ratio: 16 / 10; display: grid; place-items: center; overflow: hidden; border: 1px solid var(--line); }
+.hero-img img { max-width: 78%; max-height: 82%; object-fit: contain; }
+.d-name { font-size: 1.15rem; font-weight: 750; line-height: 1.25; margin: 16px 0 10px; }
+.d-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px 12px; }
+.d-price b { font-stretch: 70%; font-weight: 900; font-size: 3.4rem; line-height: .95; font-variant-numeric: tabular-nums; }
+.d-score { display: flex; align-items: center; gap: 10px; margin: 12px 0 18px; color: var(--muted); font-size: .9rem; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px; margin-bottom: 14px; }
+.seg { display: flex; background: var(--paper); border-radius: 999px; padding: 3px; margin-bottom: 8px; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 7px 0; border-radius: 999px; font-weight: 700; font-size: .85rem; color: var(--muted); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.chart { width: 100%; height: auto; display: block; }
+.chart .l { fill: none; stroke: var(--chart); stroke-width: 2; stroke-linejoin: round; }
+.chart .a { fill: var(--chart-fill); }
+.chart .nm { stroke: var(--muted); stroke-dasharray: 4 4; }
+.chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+.chart .low { fill: var(--down); font-weight: 700; }
+.chart .now { fill: var(--ticket); stroke: var(--ink); stroke-width: 2; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stats dt { color: var(--muted); font-size: .78rem; }
+.stats dd { margin: 2px 0 0; font-weight: 800; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.why li { padding: 9px 0 9px 22px; border-top: 1px solid var(--line); position: relative; font-size: .92rem; }
+.why li:first-child { border-top: 0; }
+.why li::before { content: ""; position: absolute; left: 2px; top: 15px; width: 9px; height: 9px; border-radius: 3px; background: var(--ticket); }
+.panel h3 { margin: 0 0 8px; font-size: .95rem; }
+.cta { display: block; text-align: center; background: var(--ink); color: var(--paper); text-decoration: none; font-weight: 800;
+       padding: 16px; border-radius: 16px; font-size: 1.05rem; margin-top: 6px; }
+
+/* deals */
+.deal { display: grid; grid-template-columns: 76px 1fr; gap: 12px; align-items: center; text-decoration: none;
+        background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 12px; margin-bottom: 12px; }
+.deal .thumb { width: 76px; height: 76px; }
+.deal .grp { color: var(--muted); font-size: .76rem; margin: 0 0 3px; }
+.deal .pr { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; }
+.deal .pr > b { font-stretch: 72%; font-weight: 900; font-size: 1.35rem; }
+.deal .pr s { color: var(--muted); font-size: .85rem; }
+
+/* alerts */
+.alert { display: grid; grid-template-columns: 48px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); text-decoration: none; }
+.alert .thumb { width: 48px; height: 48px; border-radius: 10px; }
+.alert .dot { font-weight: 900; color: var(--muted); }
+.alert b { display: block; font-size: .92rem; line-height: 1.25; }
+.alert span { display: block; color: var(--muted); font-size: .84rem; margin-top: 2px; }
+.day { color: var(--muted); font-size: .8rem; font-weight: 700; margin: 18px 2px 4px; }
+
+/* stack */
+.stack { padding: 12px 0; border-top: 1px solid var(--line); }
+.stack:first-child { border-top: 0; }
+.stack-top { display: flex; justify-content: space-between; align-items: baseline; }
+.stack-top b { font-weight: 750; }
+.stack-top strong { font-stretch: 72%; font-weight: 900; font-size: 1.5rem; }
+.sbar { height: 10px; background: var(--paper); border-radius: 5px; display: flex; overflow: hidden; margin: 6px 0; }
+.sbar i:first-child { background: var(--ticket); } .sbar i:last-child { background: var(--cb); }
+.stack p { margin: 0; color: var(--muted); font-size: .84rem; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips li { border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: .85rem; color: var(--muted); }
+.chips li.on { background: var(--ticket); border-color: var(--ticket); color: #132036; }
+.chips b { color: inherit; }
+.sec { font-size: 1.05rem; font-weight: 800; margin: 22px 2px 10px; }
+
+/* empty + pair */
+.empty { text-align: center; color: var(--muted); padding: 48px 24px; }
+.empty b { display: block; color: var(--ink); font-size: 1.1rem; margin-bottom: 6px; }
+.pair { max-width: 420px; margin: 12vh auto 0; padding: 0 24px; text-align: center; }
+.pair img { width: 88px; height: 88px; border-radius: 22px; }
+.pair h2 { font-stretch: 115%; font-weight: 900; font-size: 1.6rem; margin: 18px 0 8px; }
+.pair p { color: var(--muted); margin: 0 0 20px; }
+.pair input { width: 100%; font: inherit; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--line);
+              background: var(--surface); color: var(--ink); margin-bottom: 12px; }
+.pair button { width: 100%; border: 0; background: var(--ink); color: var(--paper); font-weight: 800; padding: 15px; border-radius: 14px; cursor: pointer; }
+
+/* tab bar */
+.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; padding-inline: max(6px, calc((100% - 640px) / 2)) !important; background: var(--bar); backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--line);
+        display: grid; grid-template-columns: repeat(4, 1fr); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); }
+.tabs button { border: 0; background: transparent; display: grid; justify-items: center; gap: 3px; padding: 6px 0;
+               font-size: .72rem; font-weight: 700; color: var(--muted); cursor: pointer; position: relative; }
+.tabs svg { width: 24px; height: 24px; }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button[aria-selected="true"]::before { content: ""; position: absolute; top: -7px; width: 28px; height: 4px; border-radius: 0 0 4px 4px; background: var(--ticket); }
+.badge { position: absolute; top: 2px; left: calc(50% + 6px); background: var(--up); color: #fff; font-size: .62rem;
+         min-width: 16px; height: 16px; border-radius: 8px; display: grid; place-items: center; padding: 0 4px; }
+.foot { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 24px; }
+</style>
+</head>
+<body>
+<header class="head" id="head">
+  <h1 id="title">Deal Hunter</h1>
+  <div class="updated" id="updated"></div>
+  <button class="icon-btn" id="refresh" aria-label="Refresh">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v5h-5"/></svg>
+  </button>
+</header>
+<main id="main"></main>
+
+<section class="detail" id="detail" hidden aria-modal="true" role="dialog" aria-label="Item details"></section>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button role="tab" data-tab="tracking" aria-selected="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 3 8-8"/><path d="M3 21h18"/></svg>Tracking</button>
+  <button role="tab" data-tab="deals" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 12V4h8l10 10-8 8L3 12z"/><circle cx="7.5" cy="8.5" r="1.5"/></svg>Deals</button>
+  <button role="tab" data-tab="alerts" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4l2-2z"/><path d="M10 21h4"/></svg>Alerts<span class="badge" id="badge" hidden></span></button>
+  <button role="tab" data-tab="stack" aria-selected="false">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg>Stack</button>
+</nav>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const money = v => v == null ? "–" : "£" + (v >= 100 || Number.isInteger(v) ? Math.round(v).toLocaleString("en-GB") : v.toFixed(2));
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+const rank = t => t === "Gem" ? 6 : (t || 1);
+const grade = t => t === "Gem" ? `<span class="grade gem">Gem</span>` :
+  `<span class="grade" role="img" aria-label="Deal score ${t || 1} out of 5">${[0,1,2,3,4].map(k => `<i class="${k < (t || 1) ? "on" : ""}"></i>`).join("")}<b>${t || 1}/5</b></span>`;
+const imgTag = u => u ? `<img src="${esc(u)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : "";
+const ago = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
+
+// ---- pairing: the private code arrives in the link's #hash, which never reaches any server ----
+const hash = new URLSearchParams(location.hash.slice(1));
+if (hash.get("pair")) { store.set("dh_key", hash.get("pair")); history.replaceState(null, "", location.pathname); }
+let KEY = store.get("dh_key", "");
+let cache = store.get("dh_cache", {});     // latest app data, by message title
+let alerts = store.get("dh_alerts", []);   // alert history, newest first
+let tab = "tracking";
+
+// ---- data ----
+async function poll(topic, since) {
+  const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}/json?poll=1&since=${since}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(res.status);
+  return (await res.text()).trim().split("\n").filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === "message");
+}
+async function refresh() {
+  if (!KEY) return render();
+  $("#refresh").classList.add("spin");
+  try {
+    const [data, live] = await Promise.all([poll(KEY + "-app", "12h"), poll(KEY, "24h")]);
+    data.sort((a, b) => a.time - b.time).forEach(m => {
+      try { cache[m.title] = { d: JSON.parse(m.message), ts: m.time }; } catch (e) {}
+    });
+    const known = new Set(alerts.map(a => a.id));
+    const fresh = live.filter(m => !known.has(m.id) && m.title !== "Deal Hunter")
+      .map(m => ({ id: m.id, ts: m.time, t: m.title, m: m.message, u: m.click, i: m.attachment && m.attachment.url, p: m.priority }));
+    alerts = fresh.concat(alerts).sort((a, b) => b.ts - a.ts).slice(0, 150);
+    const seen = store.get("dh_seen", 0);
+    store.set("dh_cache", cache); store.set("dh_alerts", alerts);
+    const unseen = alerts.filter(a => a.ts > seen).length;
+    $("#badge").hidden = !unseen || tab === "alerts"; $("#badge").textContent = unseen;
+  } catch (e) {
+    toastOffline = true;
+  }
+  $("#refresh").classList.remove("spin");
+  render();
+}
+let toastOffline = false;
+
+function items() {
+  const ids = (cache.items && cache.items.d) || [];
+  return ids.map(k => cache["item:" + k] && cache["item:" + k].d).filter(Boolean).sort((a, b) => (b.pts || 0) - (a.pts || 0));
+}
+function lastUpdate() {
+  return Math.max(0, ...Object.keys(cache).filter(k => k.startsWith("meta:")).map(k => cache[k].d.ts || 0));
+}
+
+// ---- charts ----
+function seriesOf(it, days) {
+  const s = it.s || []; const start = new Date(it.s0 + "T00:00:00");
+  const pts = s.map((p, i) => [new Date(start.getTime() + i * 864e5), p]).filter(x => x[1] != null);
+  return days ? pts.slice(-days) : pts;
+}
+function spark(it) {
+  const pts = seriesOf(it, 90); if (pts.length < 2) return "";
+  const w = 300, h = 38, ps = pts.map(p => p[1]).concat(it.nm ? [it.nm] : []);
+  const lo = Math.min(...ps), hi = Math.max(...ps) || 1, rng = (hi - lo) || hi * .05;
+  const x = i => i / (pts.length - 1) * w, y = p => 3 + (hi - p) / rng * (h - 6);
+  let d = `M0,${y(pts[0][1]).toFixed(1)}`; pts.forEach((p, i) => { if (i) d += ` H${x(i).toFixed(1)} V${y(p[1]).toFixed(1)}`; });
+  const nm = it.nm ? `<line x1="0" x2="${w}" y1="${y(it.nm).toFixed(1)}" y2="${y(it.nm).toFixed(1)}"/>` : "";
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><path class="a" d="${d} V${h} H0 Z"/>${nm}<path class="l" d="${d}" vector-effect="non-scaling-stroke"/></svg>`;
+}
+function bigChart(it, days) {
+  const pts = seriesOf(it, days);
+  if (pts.length < 2) return `<p class="below">The graph fills in after a couple of days of tracking.</p>`;
+  const w = 360, h = 200, L = 46, R = 14, T = 12, B = 24;
+  const ps = pts.map(p => p[1]).concat(it.nm ? [it.nm] : []);
+  let lo = Math.min(...ps), hi = Math.max(...ps); const pad = (hi - lo) * .12 || hi * .05; lo -= pad; hi += pad;
+  const t0 = pts[0][0].getTime(), span = (pts[pts.length - 1][0].getTime() - t0) || 1;
+  const x = d => L + (d.getTime() - t0) / span * (w - L - R), y = p => T + (hi - p) / (hi - lo) * (h - T - B);
+  let d = `M${x(pts[0][0]).toFixed(1)},${y(pts[0][1]).toFixed(1)}`;
+  pts.forEach((p, i) => { if (i) d += ` H${x(p[0]).toFixed(1)} V${y(p[1]).toFixed(1)}`; });
+  const low = pts.reduce((a, b) => b[1] < a[1] ? b : a), last = pts[pts.length - 1];
+  const months = [], seen = new Set();
+  pts.forEach(([dt]) => { const k = dt.getFullYear() + "-" + dt.getMonth(); if (!seen.has(k) && dt.getDate() <= 7) { seen.add(k); months.push(dt); } });
+  const step = Math.max(1, Math.ceil(months.length / 5));
+  const ticks = (days && days <= 31 ? pts.filter((p, i) => i % 7 === 0).map(p => p[0]) : months.filter((m, i) => i % step === 0))
+    .map(dt => `<text x="${x(dt).toFixed(1)}" y="${h - 6}" text-anchor="middle">${dt.toLocaleDateString("en-GB", days && days <= 31 ? { day: "numeric", month: "short" } : { month: "short" })}</text>`).join("");
+  const nm = it.nm ? `<line class="nm" x1="${L}" x2="${w - R}" y1="${y(it.nm).toFixed(1)}" y2="${y(it.nm).toFixed(1)}"/><text x="${L - 6}" y="${(y(it.nm) + 4).toFixed(1)}" text-anchor="end">${money(it.nm)}</text>` : "";
+  return `<svg class="chart" viewBox="0 0 ${w} ${h}" role="img" aria-label="Lowest price ${money(low[1])}, now ${money(last[1])}">
+    <path class="a" d="${d} V${h - B} H${x(pts[0][0]).toFixed(1)} Z"/><path class="l" d="${d}"/>${nm}
+    <circle cx="${x(low[0]).toFixed(1)}" cy="${y(low[1]).toFixed(1)}" r="3.5" fill="var(--down)"/>
+    <text class="low" x="${Math.min(Math.max(x(low[0]), L + 30), w - 40).toFixed(1)}" y="${Math.min(y(low[1]) + 17, h - B - 2).toFixed(1)}" text-anchor="middle">low ${money(low[1])}</text>
+    <circle class="now" cx="${x(last[0]).toFixed(1)}" cy="${y(last[1]).toFixed(1)}" r="5"/>${ticks}</svg>`;
+}
+function change(it) {
+  if (it.pv && it.p !== it.pv) { const d = it.p - it.pv;
+    return `<span class="chg ${d < 0 ? "down" : "up"}">${d < 0 ? "▼" : "▲"} ${money(Math.abs(d))}</span>`; }
+  return `<span class="chg">${it.ch ? "changed " + new Date(it.ch * 1000).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "no change"}</span>`;
+}
+const belowText = it => it.nm && it.nm > it.p ? `${Math.round((it.nm - it.p) / it.nm * 100)}% below normal` : "at its normal price";
+
+// ---- screens ----
+function viewTracking() {
+  const list = items();
+  if (!list.length) return `<div class="empty"><b>Nothing tracked yet</b>Your tracked items appear here after the Mac's next check. To track something, send Claude a product link.</div>`;
+  const drops = list.filter(i => i.pv && i.p < i.pv).length, good = list.filter(i => rank(i.t) >= 3).length;
+  const lede = [`${list.length} item${list.length > 1 ? "s" : ""} tracked.`, drops ? `${drops} dropped since the last check.` : "",
+    good ? `${good} ${good > 1 ? "are" : "is"} a 3/5 deal or better.` : ""].filter(Boolean).join(" ");
+  return `<p class="lede">${lede}</p>` + list.map(it => `
+  <button class="card${it.t === "Gem" ? " gem" : ""}" data-item="${esc(it.k)}" aria-label="${esc(it.n)}, ${money(it.p)}">
+    <div class="row">
+      <div class="thumb">${imgTag(it.i)}</div>
+      <div><p class="name">${esc(it.n)}</p>${grade(it.t)}</div>
+      <div class="price"><b>${money(it.p)}</b>${change(it)}</div>
+    </div>
+    ${spark(it)}
+    <div class="below">${belowText(it)}${it.nm && it.nm > it.p ? `, normally ${money(it.nm)}` : ""}</div>
+  </button>`).join("");
+}
+function viewDeals() {
+  const rows = Object.keys(cache).filter(k => k.startsWith("deals:")).flatMap(k => cache[k].d || [])
+    .sort((a, b) => (b.pts || 0) - (a.pts || 0));
+  if (!rows.length) return `<div class="empty"><b>No standout deals right now</b>Deals rated 3/5 or better from your watchers show up here.</div>`;
+  return `<p class="lede">Found by your watchers, best first.</p>` + rows.map(r => `
+  <a class="deal" href="${esc(r.u)}" target="_blank" rel="noopener">
+    <div class="thumb">${imgTag(r.i)}</div>
+    <div><p class="grp">${esc(r.g)}</p><p class="name">${esc(r.n)}</p>
+      <div class="pr">${grade(r.t)}<b>${money(r.p)}</b>${r.nm && r.nm > r.p ? `<s>${money(r.nm)}</s>` : ""}</div></div>
+  </a>`).join("");
+}
+function viewAlerts() {
+  if (!alerts.length) return `<div class="empty"><b>No alerts yet</b>Price changes and deals appear here as they happen.</div>`;
+  let out = "", lastDay = "";
+  alerts.forEach(a => {
+    const dt = new Date(a.ts * 1000), day = dt.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
+    if (day !== lastDay) { out += `<p class="day">${day}</p>`; lastDay = day; }
+    const pic = a.i ? `<div class="thumb">${imgTag(a.i)}</div>` : `<div class="thumb dot">£</div>`;
+    const body = `${pic}<div><b>${esc(a.t)}</b><span>${esc(a.m)}</span><span>${dt.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</span></div>`;
+    out += a.u ? `<a class="alert" href="${esc(a.u)}" target="_blank" rel="noopener">${body}</a>` : `<div class="alert">${body}</div>`;
+  });
+  return out;
+}
+function viewStack() {
+  const s = (cache.stack && cache.stack.d) || [], b = (cache.banners && cache.banners.d) || {};
+  const rows = s.map(r => { const [kind, pct, src] = r.c;
+    const first = kind === "student" && pct ? `${pct}% student with ${src}` : pct ? (src ? `${pct}% code ending ${src}` : `${pct}% off, no code needed`) : "No code worth using";
+    return `<li class="stack"><div class="stack-top"><b>${esc(r.n)}</b><strong>${r.tt}%</strong></div>
+      <div class="sbar"><i style="width:${Math.min(pct, 60) / 60 * 100}%"></i><i style="width:${Math.min(r.cb, 60) / 60 * 100}%"></i></div>
+      <p>${esc(first)}${r.cb ? `, then ${r.cb}% TopCashback` : ""}</p></li>`; }).join("");
+  const chips = Object.entries(b).map(([n, v]) => { const on = (v.up_to ? [`up to ${v.up_to}% off`] : []).concat(v.flags || []);
+    return `<li class="${on.length ? "on" : ""}"><b>${esc(n)}</b> ${esc(on.join(", ") || "no sale on")}</li>`; }).join("");
+  return `<p class="lede">Best code or student discount, then cashback on top of any sale price. One code per order.</p>
+    <div class="panel"><ul>${rows || `<li class="below">Appears after the Mac's next check.</li>`}</ul></div>
+    <p class="sec">Sitewide sales</p><ul class="chips">${chips || `<li>Appears after the next check.</li>`}</ul>`;
+}
+
+function render() {
+  if (!KEY) {
+    $("#head").hidden = true; $("#tabs").hidden = true;
+    $("#main").innerHTML = `<div class="pair"><img src="apple-touch-icon.png" alt=""><h2>Deal Hunter</h2>
+      <p>Open your pairing link from Claude, or paste your pairing code here.</p>
+      <form id="pairForm"><input id="pairIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pairing code" aria-label="Pairing code"><button>Pair this phone</button></form></div>`;
+    $("#pairForm").onsubmit = e => { e.preventDefault(); const v = $("#pairIn").value.trim(); if (v) { KEY = v; store.set("dh_key", v); $("#head").hidden = false; $("#tabs").hidden = false; refresh(); } };
+    return;
+  }
+  const titles = { tracking: "Deal Hunter", deals: "Deals", alerts: "Alerts", stack: "Stack" };
+  $("#title").textContent = titles[tab]; $("#title").className = tab === "tracking" ? "" : "screen";
+  const lu = lastUpdate();
+  $("#updated").textContent = toastOffline ? "Offline, showing saved data" : lu ? `Updated ${ago(lu)}` : "";
+  $("#main").innerHTML = { tracking: viewTracking, deals: viewDeals, alerts: viewAlerts, stack: viewStack }[tab]()
+    + (tab === "tracking" ? `<p class="foot">Prices update while your Mac is awake. Clothes and sale news update around the clock.</p>` : "");
+  document.querySelectorAll("[data-item]").forEach(b => b.onclick = () => openItem(b.dataset.item));
+}
+function setTab(t) {
+  tab = t;
+  document.querySelectorAll(".tabs button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === t));
+  if (t === "alerts") { store.set("dh_seen", Date.now() / 1000); $("#badge").hidden = true; }
+  render(); window.scrollTo(0, 0);
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+$("#refresh").onclick = refresh;
+
+// ---- item detail ----
+let range = 365;
+function openItem(k) {
+  const it = cache["item:" + k] && cache["item:" + k].d; if (!it) return;
+  const el = $("#detail");
+  const draw = () => {
+    el.innerHTML = `<div class="bar"><button class="icon-btn" id="back" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>${grade(it.t)}</div>
+      <div class="wrap">
+        <div class="hero-img">${imgTag(it.i)}</div>
+        <p class="d-name">${esc(it.n)}</p>
+        <div class="d-price"><b>${money(it.p)}</b>${change(it)}</div>
+        <div class="d-score">Deal score ${it.pts ?? "–"} out of 100, ${belowText(it)}</div>
+        <div class="panel">
+          <div class="seg" role="group" aria-label="Time range">${[[30, "1M"], [90, "3M"], [365, "1Y"]].map(([d, l]) =>
+            `<button data-r="${d}" aria-pressed="${range === d}">${l}</button>`).join("")}</div>
+          ${bigChart(it, range)}
+        </div>
+        <div class="panel"><dl class="stats">
+          <div><dt>Normal price</dt><dd>${money(it.nm)}</dd></div>
+          <div><dt>Lowest this year</dt><dd>${money(it.ly)}</dd></div>
+          <div><dt>Highest</dt><dd>${money(it.hy)}</dd></div>
+          <div><dt>Your target</dt><dd>${it.tg ? money(it.tg) : "None set"}</dd></div>
+        </dl></div>
+        ${(it.w || []).length ? `<div class="panel"><h3>Why it scores ${it.t === "Gem" ? "as a Gem" : (it.t || 1) + "/5"}</h3><ul class="why">${it.w.map(w => `<li>${esc(w)}</li>`).join("")}</ul></div>` : ""}
+        <a class="cta" href="${esc(it.u)}" target="_blank" rel="noopener">Compare shops and buy</a>
+      </div>`;
+    $("#back").onclick = closeItem;
+    el.querySelectorAll("[data-r]").forEach(b => b.onclick = () => { range = +b.dataset.r; draw(); });
+  };
+  draw(); el.hidden = false; el.classList.add("open"); el.scrollTop = 0;
+  document.body.style.overflow = "hidden";
+  history.pushState({ item: k }, "", "#item=" + k);
+}
+function closeItem() { $("#detail").hidden = true; document.body.style.overflow = ""; if (location.hash) history.back(); }
+window.addEventListener("popstate", () => { if (!location.hash) { $("#detail").hidden = true; document.body.style.overflow = ""; } });
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("#detail").hidden) closeItem(); });
+
+// ---- start ----
+render();
+refresh().then(() => { if (hash.get("item")) openItem(hash.get("item")); });
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
