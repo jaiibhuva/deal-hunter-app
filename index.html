@@ -168,6 +168,10 @@ main { padding: 4px 16px 24px; max-width: 640px; margin: 0 auto; }
 .tabs button[aria-selected="true"]::before { content: ""; position: absolute; top: -7px; width: 28px; height: 4px; border-radius: 0 0 4px 4px; background: var(--ticket); }
 .badge { position: absolute; top: 2px; left: calc(50% + 6px); background: var(--up); color: #fff; font-size: .62rem;
          min-width: 16px; height: 16px; border-radius: 8px; display: grid; place-items: center; padding: 0 4px; }
+.problem { border-color: var(--up); }
+.problem b { display: block; margin-bottom: 4px; }
+.problem p { margin: 0 0 12px; color: var(--muted); font-size: .9rem; }
+.problem button { border: 0; background: var(--ink); color: var(--paper); font-weight: 800; padding: 10px 16px; border-radius: 12px; cursor: pointer; }
 .foot { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 24px; }
 </style>
 </head>
@@ -210,9 +214,10 @@ const ago = ts => { const m = Math.round((Date.now() / 1000 - ts) / 60);
   return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`; };
 
 // ---- pairing: the private code arrives in the link's #hash, which never reaches any server ----
+const clean = k => String(k || "").replace(/[^A-Za-z0-9_-]/g, "");
 const hash = new URLSearchParams(location.hash.slice(1));
-if (hash.get("pair")) { store.set("dh_key", hash.get("pair")); history.replaceState(null, "", location.pathname); }
-let KEY = store.get("dh_key", "");
+if (hash.get("pair")) { store.set("dh_key", clean(hash.get("pair"))); history.replaceState(null, "", location.pathname); }
+let KEY = clean(store.get("dh_key", ""));
 let cache = store.get("dh_cache", {});     // latest app data, by message title
 let alerts = store.get("dh_alerts", []);   // alert history, newest first
 let tab = "tracking";
@@ -220,7 +225,7 @@ let tab = "tracking";
 // ---- data ----
 async function poll(topic, since) {
   const res = await fetch(`https://ntfy.sh/${encodeURIComponent(topic)}/json?poll=1&since=${since}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(res.status);
+  if (!res.ok) throw new Error(`the data service replied ${res.status}`);
   return (await res.text()).trim().split("\n").filter(Boolean).map(l => JSON.parse(l)).filter(m => m.event === "message");
 }
 async function refresh() {
@@ -239,13 +244,14 @@ async function refresh() {
     store.set("dh_cache", cache); store.set("dh_alerts", alerts);
     const unseen = alerts.filter(a => a.ts > seen).length;
     $("#badge").hidden = !unseen || tab === "alerts"; $("#badge").textContent = unseen;
+    lastError = "";
   } catch (e) {
-    toastOffline = true;
+    lastError = e && e.message ? e.message : "no connection";
   }
   $("#refresh").classList.remove("spin");
   render();
 }
-let toastOffline = false;
+let lastError = "";
 
 function items() {
   const ids = (cache.items && cache.items.d) || [];
@@ -361,16 +367,20 @@ function render() {
     $("#main").innerHTML = `<div class="pair"><img src="apple-touch-icon.png" alt=""><h2>Deal Hunter</h2>
       <p>Open your pairing link from Claude, or paste your pairing code here.</p>
       <form id="pairForm"><input id="pairIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Pairing code" aria-label="Pairing code"><button>Pair this phone</button></form></div>`;
-    $("#pairForm").onsubmit = e => { e.preventDefault(); const v = $("#pairIn").value.trim(); if (v) { KEY = v; store.set("dh_key", v); $("#head").hidden = false; $("#tabs").hidden = false; refresh(); } };
+    $("#pairForm").onsubmit = e => { e.preventDefault(); const v = clean($("#pairIn").value); if (v) { KEY = v; store.set("dh_key", v); $("#head").hidden = false; $("#tabs").hidden = false; refresh(); } };
     return;
   }
   const titles = { tracking: "Deal Hunter", deals: "Deals", alerts: "Alerts", stack: "Stack" };
   $("#title").textContent = titles[tab]; $("#title").className = tab === "tracking" ? "" : "screen";
   const lu = lastUpdate();
-  $("#updated").textContent = toastOffline ? "Offline, showing saved data" : lu ? `Updated ${ago(lu)}` : "";
-  $("#main").innerHTML = { tracking: viewTracking, deals: viewDeals, alerts: viewAlerts, stack: viewStack }[tab]()
+  $("#updated").textContent = lu ? `Updated ${ago(lu)}` : "";
+  const problem = lastError ? `<div class="panel problem"><b>Couldn't load your latest data</b>
+      <p>${esc(lastError)}. ${Object.keys(cache).length ? "Showing what was saved last time." : ""} Check your connection and tap refresh. If it keeps happening, pair this phone again.</p>
+      <button type="button" id="repair">Pair again</button></div>` : "";
+  $("#main").innerHTML = problem + { tracking: viewTracking, deals: viewDeals, alerts: viewAlerts, stack: viewStack }[tab]()
     + (tab === "tracking" ? `<p class="foot">Prices update while your Mac is awake. Clothes and sale news update around the clock.</p>` : "");
   document.querySelectorAll("[data-item]").forEach(b => b.onclick = () => openItem(b.dataset.item));
+  const rp = $("#repair"); if (rp) rp.onclick = () => { KEY = ""; store.set("dh_key", ""); lastError = ""; render(); };
 }
 function setTab(t) {
   tab = t;
